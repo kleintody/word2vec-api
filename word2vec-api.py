@@ -32,7 +32,17 @@ class N_Similarity(Resource):
         parser.add_argument('ws1', type=str, required=True, help="Word set 1 cannot be blank!", action='append')
         parser.add_argument('ws2', type=str, required=True, help="Word set 2 cannot be blank!", action='append')
         args = parser.parse_args()
-        return model.n_similarity(filter_words(args['ws1']),filter_words(args['ws2']))
+        arg1 = [
+            unicode(base64.b64decode(w_b64, encoding="utf8"))
+            for w_b64 in filter_words(args['ws1'])
+            ]
+        arg2 = [
+            unicode(base64.b64decode(w_b64, encoding="utf8"))
+            for w_b64 in filter_words(args['ws2'])
+            ]
+        if len(arg1) == 0 or len(arg2) == 0:
+            return 0.
+        return model.n_similarity(arg1, arg2)
 
 
 class Similarity(Resource):
@@ -55,15 +65,15 @@ class MostSimilar(Resource):
         neg = filter_words(args.get('negative', []))
         t = args.get('topn', 10)
         pos = [] if pos == None else pos
-        neg = [] if neg == None else neg
+        neg = [] if neg == None else neg        
         t = 10 if t == None else t
-        print "positive: " + str(pos) + " negative: " + str(neg) + " topn: " + str(t)
+        print("positive: " + str(pos) + " negative: " + str(neg) + " topn: " + str(t))
         try:
             res = model.most_similar_cosmul(positive=pos,negative=neg,topn=t)
             return res
-        except Exception, e:
-            print e
-            print res
+        except Exception as e:
+            print(e)
+            print(res)
 
 
 class Model(Resource):
@@ -71,21 +81,25 @@ class Model(Resource):
         parser = reqparse.RequestParser()
         parser.add_argument('word', type=str, required=True, help="word to query.")
         args = parser.parse_args()
+        b64_word = args['word']
+        word = base64.b64decode(b64_word)
+        print("*** {} (b64={})".format(word, b64_word))
         try:
-            res = model[args['word']]
+            res = model[unicode(word, encoding="utf8")]
+            # res = model[args['word']]
             res = base64.b64encode(res)
             return res
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
             return
 
 class ModelWordSet(Resource):
     def get(self):
         try:
-            res = base64.b64encode(cPickle.dumps(set(model.index2word)))
+            res = base64.b64encode(pickle.dumps(set(model.index2word)))
             return res
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
             return
 
 app = Flask(__name__)
@@ -117,11 +131,12 @@ if __name__ == '__main__':
     path = args.path if args.path else "/word2vec"
     port = int(args.port) if args.port else 5000
     if not args.model:
-        print "Usage: word2vec-apy.py --model path/to/the/model [--host host --port 1234]"
+        print("Usage: word2vec-apy.py --model path/to/the/model [--host host --port 1234]")
     model = w.load_word2vec_format(model_path, binary=binary)
     api.add_resource(N_Similarity, path+'/n_similarity')
     api.add_resource(Similarity, path+'/similarity')
     api.add_resource(MostSimilar, path+'/most_similar')
     api.add_resource(Model, path+'/model')
     api.add_resource(ModelWordSet, '/word2vec/model_word_set')
+    # app.run(host=host, port=port, debug=True)
     app.run(host=host, port=port)
